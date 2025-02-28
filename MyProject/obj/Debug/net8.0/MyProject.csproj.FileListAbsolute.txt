@@ -1,0 +1,14 @@
+/home/kyflem/Part_A/MyProject/bin/Debug/net8.0/MyProject
+/home/kyflem/Part_A/MyProject/bin/Debug/net8.0/MyProject.deps.json
+/home/kyflem/Part_A/MyProject/bin/Debug/net8.0/MyProject.runtimeconfig.json
+/home/kyflem/Part_A/MyProject/bin/Debug/net8.0/MyProject.dll
+/home/kyflem/Part_A/MyProject/bin/Debug/net8.0/MyProject.pdb
+/home/kyflem/Part_A/MyProject/obj/Debug/net8.0/MyProject.GeneratedMSBuildEditorConfig.editorconfig
+/home/kyflem/Part_A/MyProject/obj/Debug/net8.0/MyProject.AssemblyInfoInputs.cache
+/home/kyflem/Part_A/MyProject/obj/Debug/net8.0/MyProject.AssemblyInfo.cs
+/home/kyflem/Part_A/MyProject/obj/Debug/net8.0/MyProject.csproj.CoreCompileInputs.cache
+/home/kyflem/Part_A/MyProject/obj/Debug/net8.0/MyProject.dll
+/home/kyflem/Part_A/MyProject/obj/Debug/net8.0/refint/MyProject.dll
+/home/kyflem/Part_A/MyProject/obj/Debug/net8.0/MyProject.pdb
+/home/kyflem/Part_A/MyProject/obj/Debug/net8.0/MyProject.genruntimeconfig.cache
+/home/kyflem/Part_A/MyProject/obj/Debug/net8.0/ref/MyProject.dll

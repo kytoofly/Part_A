@@ -1,0 +1,308 @@
+﻿// See https://aka.ms/new-console-template for more information
+using System;
+using System.Collections.Generic;
+using System.Threading;
+
+namespace BankingSimulation
+{
+    // Bank account class with deadlock prevention
+    public class BankAccount
+    {
+        public int Id { get; }
+        public decimal Balance { get; private set; }
+        // Mutex for protecting access to the account
+        public readonly object LockObject = new object();
+
+        public BankAccount(int id, decimal initialBalance)
+        {
+            Id = id;
+            Balance = initialBalance;
+        }
+
+        // Method to deposit money
+        public void Deposit(decimal amount)
+        {
+            Thread.Sleep(100); // Simulate processing time
+            Balance += amount;
+            Console.WriteLine($"Deposited ${amount} to Account {Id}. New balance: ${Balance}");
+        }
+
+        // Method to withdraw money
+        public bool Withdraw(decimal amount)
+        {
+            Thread.Sleep(100); // Simulate processing time
+           
+            if (Balance >= amount)
+            {
+                Balance -= amount;
+                Console.WriteLine($"Withdrew ${amount} from Account {Id}. New balance: ${Balance}");
+                return true;
+            }
+           
+            Console.WriteLine($"Failed to withdraw ${amount} from Account {Id}. Insufficient funds. Current balance: ${Balance}");
+            return false;
+        }
+
+        // Method to transfer money to another account - with deadlock prevention
+        public bool TransferTo(BankAccount destinationAccount, decimal amount, int maxRetries = 3)
+        {
+            // DEADLOCK PREVENTION TECHNIQUE 1: Resource Ordering
+            // Always acquire locks in a consistent order (by account ID)
+            BankAccount firstLock = this.Id < destinationAccount.Id ? this : destinationAccount;
+            BankAccount secondLock = this.Id < destinationAccount.Id ? destinationAccount : this;
+           
+            bool isSourceFirst = (this.Id == firstLock.Id);
+           
+            int retryCount = 0;
+            bool transferComplete = false;
+
+            while (!transferComplete && retryCount <= maxRetries)
+            {
+                // DEADLOCK PREVENTION TECHNIQUE 2: Timeout Mechanism
+                bool firstLockAcquired = false;
+                bool secondLockAcquired = false;
+               
+                try
+                {
+                    // Try to acquire first lock with timeout
+                    Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId}: Attempting to acquire lock on Account {firstLock.Id}");
+                    firstLockAcquired = Monitor.TryEnter(firstLock.LockObject, 1000); // 1 second timeout
+                   
+                    if (firstLockAcquired)
+                    {
+                        Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId}: Acquired lock on Account {firstLock.Id}");
+                       
+                        // Simulate some processing time
+                        Thread.Sleep(100);
+                       
+                        // Try to acquire second lock with timeout
+                        Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId}: Attempting to acquire lock on Account {secondLock.Id}");
+                        secondLockAcquired = Monitor.TryEnter(secondLock.LockObject, 1000); // 1 second timeout
+                       
+                        if (secondLockAcquired)
+                        {
+                            Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId}: Acquired lock on Account {secondLock.Id}");
+                           
+                            // Both locks acquired, perform the transfer
+                            if (isSourceFirst)
+                            {
+                                // Normal order: this account is source
+                                if (Balance >= amount)
+                                {
+                                    // Withdraw from this account
+                                    Balance -= amount;
+                                    // Deposit to destination account
+                                    destinationAccount.Balance += amount;
+                                   
+                                    Console.WriteLine($"Transferred ${amount} from Account {Id} to Account {destinationAccount.Id}");
+                                    Console.WriteLine($"Account {Id} balance: ${Balance}");
+                                    Console.WriteLine($"Account {destinationAccount.Id} balance: ${destinationAccount.Balance}");
+                                   
+                                    transferComplete = true;
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"Failed to transfer ${amount} from Account {Id} to Account {destinationAccount.Id}. Insufficient funds.");
+                                    transferComplete = true; // Mark as complete even though it failed (no need to retry)
+                                }
+                            }
+                            else
+                            {
+                                // Reverse order: destination account is first, this account is second
+                                if (Balance >= amount)
+                                {
+                                    // Withdraw from this account
+                                    Balance -= amount;
+                                    // Deposit to destination account
+                                    destinationAccount.Balance += amount;
+                                   
+                                    Console.WriteLine($"Transferred ${amount} from Account {Id} to Account {destinationAccount.Id}");
+                                    Console.WriteLine($"Account {Id} balance: ${Balance}");
+                                    Console.WriteLine($"Account {destinationAccount.Id} balance: ${destinationAccount.Balance}");
+                                   
+                                    transferComplete = true;
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"Failed to transfer ${amount} from Account {Id} to Account {destinationAccount.Id}. Insufficient funds.");
+                                    transferComplete = true; // Mark as complete even though it failed (no need to retry)
+                                }
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId}: Timed out waiting for lock on Account {secondLock.Id}");
+                            // Second lock couldn't be acquired - will retry
+                            retryCount++;
+                            Console.WriteLine($"Transfer attempt failed. Retrying... (Attempt {retryCount} of {maxRetries})");
+                           
+                            // Random backoff before retrying
+                            Random random = new Random();
+                            int backoffTime = random.Next(100, 500) * retryCount;  // Exponential backoff
+                            Console.WriteLine($"Backing off for {backoffTime}ms before retry");
+                            Thread.Sleep(backoffTime);
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId}: Timed out waiting for lock on Account {firstLock.Id}");
+                        // First lock couldn't be acquired - will retry
+                        retryCount++;
+                        Console.WriteLine($"Transfer attempt failed. Retrying... (Attempt {retryCount} of {maxRetries})");
+                       
+                        // Random backoff before retrying
+                        Random random = new Random();
+                        int backoffTime = random.Next(100, 500) * retryCount;  // Exponential backoff
+                        Console.WriteLine($"Backing off for {backoffTime}ms before retry");
+                        Thread.Sleep(backoffTime);
+                    }
+                }
+                finally
+                {
+                    // Always release locks in reverse order of acquisition
+                    if (secondLockAcquired)
+                    {
+                        Monitor.Exit(secondLock.LockObject);
+                        Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId}: Released lock on Account {secondLock.Id}");
+                    }
+                   
+                    if (firstLockAcquired)
+                    {
+                        Monitor.Exit(firstLock.LockObject);
+                        Console.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId}: Released lock on Account {firstLock.Id}");
+                    }
+                }
+            }
+           
+            if (!transferComplete)
+            {
+                Console.WriteLine($"Transfer failed after {maxRetries} attempts. Operation aborted.");
+            }
+           
+            return transferComplete;
+        }
+
+        // Get balance with mutex protection
+        public decimal GetBalance()
+        {
+            lock (LockObject)
+            {
+                return Balance;
+            }
+        }
+    }
+
+    // Customer class that will run in its own thread
+    public class Customer
+    {
+        private static int nextId = 1;
+        public int Id { get; }
+        public string Name { get; }
+        private List<BankAccount> accounts;
+        private Random random = new Random();
+
+        public Customer(string name, List<BankAccount> accounts)
+        {
+            Id = nextId++;
+            Name = name;
+            this.accounts = accounts;
+        }
+
+        // Run method that will perform transfers with deadlock prevention
+        public void PerformTransfers()
+        {
+            Console.WriteLine($"Customer {Id} ({Name}) started transfer operations");
+           
+            // Perform 3 random transfers
+            for (int i = 0; i < 3; i++)
+            {
+                // Randomly select source and destination accounts
+                int sourceIndex = random.Next(accounts.Count);
+                int destIndex;
+                do
+                {
+                    destIndex = random.Next(accounts.Count);
+                } while (destIndex == sourceIndex); // Ensure source and destination are different
+               
+                BankAccount sourceAccount = accounts[sourceIndex];
+                BankAccount destAccount = accounts[destIndex];
+               
+                // Random amount between $10 and $100
+                decimal amount = random.Next(10, 101);
+               
+                Console.WriteLine($"Customer {Id} ({Name}) attempting to transfer ${amount} from Account {sourceAccount.Id} to Account {destAccount.Id}");
+               
+                // Perform transfer with deadlock prevention
+                sourceAccount.TransferTo(destAccount, amount);
+               
+                // Sleep for a random duration between transfers
+                Thread.Sleep(random.Next(200, 501));
+            }
+           
+            Console.WriteLine($"Customer {Id} ({Name}) completed all transfers");
+        }
+    }
+
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            Console.WriteLine("Banking Simulation - Phase 4: Deadlock Resolution");
+            Console.WriteLine("------------------------------------------------");
+           
+            // Create bank accounts
+            List<BankAccount> accounts = new List<BankAccount>
+            {
+                new BankAccount(1, 1000),
+                new BankAccount(2, 2000),
+                new BankAccount(3, 3000)
+            };
+           
+            // Create customers
+            List<Customer> customers = new List<Customer>
+            {
+                new Customer("Alice", accounts),
+                new Customer("Bob", accounts),
+                new Customer("Charlie", accounts),
+                new Customer("Diana", accounts)
+            };
+           
+            // Create threads for each customer
+            List<Thread> threads = new List<Thread>();
+           
+            foreach (var customer in customers)
+            {
+                Thread customerThread = new Thread(customer.PerformTransfers);
+                threads.Add(customerThread);
+                Console.WriteLine($"Created thread for Customer {customer.Id} ({customer.Name})");
+            }
+           
+            Console.WriteLine("\nStarting all customer threads...\n");
+           
+            // Start all threads
+            foreach (var thread in threads)
+            {
+                thread.Start();
+            }
+           
+            // Wait for all threads to complete (should complete now with deadlock prevention)
+            foreach (var thread in threads)
+            {
+                thread.Join();
+            }
+           
+            Console.WriteLine("\nAll customer transactions completed successfully!");
+            Console.WriteLine("\nFinal account balances:");
+           
+            foreach (var account in accounts)
+            {
+                Console.WriteLine($"Account {account.Id}: ${account.GetBalance()}");
+            }
+           
+            Console.WriteLine("\nPress any key to exit...");
+            Console.ReadKey();
+        }
+    }
+}
+
+
